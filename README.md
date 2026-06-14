@@ -128,5 +128,5 @@ HTTP Request -> FastAPI Endpoint -> Database Function -> Database
     ```
 5. the project is ready, now you can run it with
     ```
-    python pain.py
+    python main.py
     ```
