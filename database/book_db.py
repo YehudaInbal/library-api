@@ -1,5 +1,7 @@
 from logger import get_logger
 from database.connection_db import get_connection
+from fastapi import HTTPException
+from database import member_db
 
 
 logger = get_logger(__name__)
@@ -57,6 +59,7 @@ class BookDB:
     
     @staticmethod
     def get_book_by_id(id:int) -> dict:
+        conn =None
         try:
             conn = get_connection()
             cursor = conn.cursor(dictionary=True)
@@ -65,8 +68,9 @@ class BookDB:
             logger.info("proses end successfully")
             return cursor.fetchone()
         finally:
-            cursor.close()
-            conn.close()
+            if conn:
+                cursor.close()
+                conn.close()
         
     @staticmethod
     def update_book(data:dict, book_id:int) -> bool:
@@ -98,10 +102,140 @@ class BookDB:
                 conn.close()
         
     @staticmethod
-    def borrow_book(book_id, member_id):
-        pass
-
+    def borrow_book(book_id, member_id) -> int:
+        conn =None
+        book = BookDB.get_book_by_id(book_id)
+        if not book:
+            logger.warning("status code = 404")
+            raise HTTPException(status_code=404, detail="book not found")
+        member = member_db.Members.get_member_by_id(member_id)
+        if not member:
+            logger.warning("status code = 404")
+            raise HTTPException(status_code=404, detail="member not found")
+        if member['total_borrows'] >= 3:
+            logger.warning(f"{member_id} cannot borrow more than 3 books")
+            raise HTTPException(status_code=400, detail="You cannot borrow more than 3 books.")
+        if member['is_active'] != True:
+            logger.warning(f"member ({member}) is not active")
+            raise HTTPException(status_code=400, detail="member is not active")
+        if book['is_available'] != True:
+            logger.warning(f"{book_id} is not available")
+            raise HTTPException(status_code=400, detail="Book is not available")
+        try:
+            conn = get_connection()
+            cursor = conn.cursor()
+            logger.info("borroing_book")
+            cursor.execute("UPDATE books SET is_available = false WHERE id = %s", (book_id,))
+            cursor.execute("UPDATE books SET borrowed_by_member_id = %s WHERE id = %s", (member_id, book_id))
+            logger.info("update in books, waiting to members")
+            member_db.Members.increment_borrows(member_id)
+            conn.commit()
+            return cursor.rowcount
+        finally:
+            if conn:
+                cursor.close()
+                conn.close()
 
     @staticmethod
     def return_book(book_id, member_id):
-        pass
+        conn =None
+        book = BookDB.get_book_by_id(book_id)
+        if not book:
+            raise HTTPException(status_code=404, detail="book not found")
+        member = member_db.Members.get_member_by_id(member_id)
+        if not member:
+            raise HTTPException(status_code=404, detail="member not found")
+        if book['borrowed_by_member_id'] != member_id:
+            logger.warning("An attempt to return a book not in the customer's possession was blocked.")
+            raise HTTPException(status_code=422, detail="You can only return books teat you borrowed.")
+        try:
+            conn = get_connection()
+            cursor = conn.cursor()
+            logger.info("returning book")
+            cursor.execute("UPDATE books SET is_available = True WHERE id = %s", (book_id,))
+            cursor.execute("UPDATE books SET borrowed_by_member_id = null WHERE id = %s", (book_id,))
+            logger.info("books Ok waiting for members")
+            member_db.Members.decrement_borrows(member_id)
+            conn.commit()
+            return cursor.rowcount
+        finally:
+            if conn:
+                cursor.close()
+                conn.close()
+
+    @staticmethod
+    def count_books_total():
+        conn =None
+        try:
+            conn = get_connection()
+            cursor = conn.cursor()
+            logger.info("counting books")
+            cursor.execute("SELECT COUNT(*) FROM books")
+            logger.info("summarizes")
+            return cursor.fetchall()[0][0]
+        finally:
+            if conn:
+                cursor.close()
+                conn.close()
+
+
+    @staticmethod
+    def count_available_books():
+        conn =None
+        try:
+            conn = get_connection()
+            cursor = conn.cursor()
+            logger.info("counting available books")
+            cursor.execute("SELECT COUNT(*) FROM books WHERE is_available = true")
+            logger.info("summarizes")
+            return cursor.fetchall()[0][0]
+        finally:
+            if conn:
+                cursor.close()
+                conn.close()
+    
+
+    @staticmethod
+    def count_borrowed_books():
+        conn =None
+        try:
+            conn = get_connection()
+            cursor = conn.cursor()
+            logger.info("counting borrowed books")
+            cursor.execute("SELECT COUNT(*) FROM books WHERE is_available = false")
+            logger.info("summarizes")
+            return cursor.fetchall()[0][0]
+        finally:
+            if conn:
+                cursor.close()
+                conn.close()
+    
+    @staticmethod
+    def count_by_genre(genre) -> int:
+        conn =None
+        try:
+            conn = get_connection()
+            cursor = conn.cursor()
+            logger.info("counting books")
+            cursor.execute("SELECT COUNT(*) FROM books WHERE genre = %s", (genre,))
+            logger.info(f"summarizes {genre}")
+            return cursor.fetchall()[0][0]
+        finally:
+            if conn:
+                cursor.close()
+                conn.close()
+
+    @staticmethod
+    def count_active_borrows_by_member(member_id):
+        conn =None
+        try:
+            conn = get_connection()
+            cursor = conn.cursor()
+            logger.info("counting active borrows")
+            cursor.execute("SELECT COUNT(*) FROM books WHERE borrowed_by_member_id = %s", (member_id,))
+            logger.info("summarizes active_borrows")
+            return cursor.fetchall()[0][0]
+        finally:
+            if conn:
+                cursor.close()
+                conn.close()
