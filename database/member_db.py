@@ -13,14 +13,12 @@ class Members:
     
     @staticmethod
     def add_member(data: dict) -> int:
-        if "is_active" not in data:
-            data["is_active"] = True
         try:
             conn = get_connection()
             cursor = conn.cursor()
             logger.info("starting to insert a member")
-            cursor.execute("""INSERT INTO members(is_active, email, name)
-            VALUES (%(is_active)s, %(email)s, %(name)s)""", data)
+            cursor.execute("""INSERT INTO members(email, name)
+            VALUES (%(email)s, %(name)s)""", data)
             conn.commit()
             logger.info("New member set")
             return cursor.lastrowid
@@ -128,14 +126,82 @@ class Members:
 
 
     @staticmethod
-    def count_active_borrows_by_member(member_id) -> int:
+    def increment_borrows(id) -> int:
         conn = None
         try:
             conn = get_connection()
             cursor = conn.cursor(dictionary=True)
-            cursor.execute("SELECT total_borrows FROM members WHERE id = %s", (member_id,))
-            return cursor.fetchone()['total_borrows']
+            cursor.execute("SELECT total_borrows FROM members WHERE id = %s", (id,))
+            set_borrows = cursor.fetchone()['total_borrows'] + 1
+            logger.info(f"incrising member borrows ({set_borrows - 1} -> {set_borrows})")
+            cursor.execute("UPDATE members SET total_borrows = %s WHERE id = %s", (set_borrows, id))
+            conn.commit()
+            logger.info("member update")
+            return set_borrows
         finally:
             if conn:
                 cursor.close()
                 conn.close()
+
+
+    @staticmethod
+    def decrement_borrows(id) -> int:
+        conn = None
+        try:
+            conn = get_connection()
+            cursor = conn.cursor(dictionary=True)
+            cursor.execute("SELECT total_borrows FROM members WHERE id = %s", (id,))
+            set_borrows = cursor.fetchone()['total_borrows'] - 1
+            if set_borrows < 0:
+                set_borrows = 0
+            logger.info(f"incrising member borrows ({set_borrows + 1} -> {set_borrows})")
+            cursor.execute("UPDATE members SET total_borrows = %s WHERE id = %s", (set_borrows, id))
+            conn.commit()
+            logger.info("member update")
+            return set_borrows
+        finally:
+            if conn:
+                cursor.close()
+                conn.close()
+
+
+        
+    
+    @staticmethod
+    def count_active_members() -> int:
+        conn = None
+        try:
+            conn = get_connection()
+            cursor = conn.cursor()
+            logger.info("looking into members")
+            cursor.execute("SELECT COUNT(*) FROM members WHERE is_active = true")
+            logger.info("summarizes")
+            return cursor.fetchall()[0][0]
+        finally:
+            if conn:
+                cursor.close()
+                conn.close()
+    
+
+    @staticmethod
+    def get_top_member() -> list[dict]:
+        conn = None
+        try:
+            conn = get_connection()
+            cursor = conn.cursor(dictionary=True)
+            cursor.execute("SELECT * FROM members WHERE total_borrows != 0")
+            members = cursor.fetchall()
+            maximum = None
+            for m in members:
+                if maximum == None or m["total_borrows"] > maximum:
+                    maximum = m["total_borrows"]
+            output = []
+            for m in members:
+                if m["total_borrows"] == maximum:
+                    output.append(m)
+            return output
+        finally:
+            if conn:
+                cursor.close()
+                conn.close()
+    
