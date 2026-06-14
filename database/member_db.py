@@ -145,29 +145,6 @@ class Members:
 
 
     @staticmethod
-    def decrement_borrows(id) -> int:
-        conn = None
-        try:
-            conn = get_connection()
-            cursor = conn.cursor(dictionary=True)
-            cursor.execute("SELECT total_borrows FROM members WHERE id = %s", (id,))
-            set_borrows = cursor.fetchone()['total_borrows'] - 1
-            if set_borrows < 0:
-                set_borrows = 0
-            logger.info(f"incrising member borrows ({set_borrows + 1} -> {set_borrows})")
-            cursor.execute("UPDATE members SET total_borrows = %s WHERE id = %s", (set_borrows, id))
-            conn.commit()
-            logger.info("member update")
-            return set_borrows
-        finally:
-            if conn:
-                cursor.close()
-                conn.close()
-
-
-        
-    
-    @staticmethod
     def count_active_members() -> int:
         conn = None
         try:

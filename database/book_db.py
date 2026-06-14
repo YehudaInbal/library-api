@@ -112,7 +112,7 @@ class BookDB:
         if not member:
             logger.warning("status code = 404")
             raise HTTPException(status_code=404, detail="member not found")
-        if member['total_borrows'] >= 3:
+        if BookDB.count_active_borrows_by_member(member_id) >= 3:
             logger.warning(f"{member_id} cannot borrow more than 3 books")
             raise HTTPException(status_code=400, detail="You cannot borrow more than 3 books.")
         if member['is_active'] != True:
@@ -127,7 +127,7 @@ class BookDB:
             logger.info("borroing_book")
             cursor.execute("UPDATE books SET is_available = false WHERE id = %s", (book_id,))
             cursor.execute("UPDATE books SET borrowed_by_member_id = %s WHERE id = %s", (member_id, book_id))
-            logger.info("update in books, waiting to members")
+            logger.info("update in books")
             member_db.Members.increment_borrows(member_id)
             conn.commit()
             return cursor.rowcount
@@ -135,6 +135,24 @@ class BookDB:
             if conn:
                 cursor.close()
                 conn.close()
+
+
+
+    @staticmethod
+    def count_active_borrows_by_member(member_id):
+        conn =None
+        try:
+            conn = get_connection()
+            cursor = conn.cursor()
+            logger.info("counting active borrows")
+            cursor.execute("SELECT COUNT(*) FROM books WHERE borrowed_by_member_id = %s", (member_id,))
+            logger.info("summarizes active_borrows")
+            return cursor.fetchall()[0][0]
+        finally:
+            if conn:
+                cursor.close()
+                conn.close()
+
 
     @staticmethod
     def return_book(book_id, member_id):
@@ -154,8 +172,7 @@ class BookDB:
             logger.info("returning book")
             cursor.execute("UPDATE books SET is_available = True WHERE id = %s", (book_id,))
             cursor.execute("UPDATE books SET borrowed_by_member_id = null WHERE id = %s", (book_id,))
-            logger.info("books Ok waiting for members")
-            member_db.Members.decrement_borrows(member_id)
+            logger.info("books Ok all fildes set")
             conn.commit()
             return cursor.rowcount
         finally:
@@ -219,21 +236,6 @@ class BookDB:
             logger.info("counting books")
             cursor.execute("SELECT COUNT(*) FROM books WHERE genre = %s", (genre,))
             logger.info(f"summarizes {genre}")
-            return cursor.fetchall()[0][0]
-        finally:
-            if conn:
-                cursor.close()
-                conn.close()
-
-    @staticmethod
-    def count_active_borrows_by_member(member_id):
-        conn =None
-        try:
-            conn = get_connection()
-            cursor = conn.cursor()
-            logger.info("counting active borrows")
-            cursor.execute("SELECT COUNT(*) FROM books WHERE borrowed_by_member_id = %s", (member_id,))
-            logger.info("summarizes active_borrows")
             return cursor.fetchall()[0][0]
         finally:
             if conn:
