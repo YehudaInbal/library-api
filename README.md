@@ -126,11 +126,7 @@ HTTP Request -> FastAPI Endpoint -> Database Function -> Database
     ```
     pip install -r requirements.txt
     ```
-5. the project is ready, enter to the app dir by
-    ```
-    cd app
-    ```
-6. now you can run it with
+5. the project is ready, now you can run it with
     ```
     python pain.py
     ```
